@@ -1,0 +1,257 @@
+-- No 1
+-- Logic:
+-- 1. Filter data selama tahun 2021
+-- 2. Temukan nilai transaksi terbesar yang sudah di bayarkan
+
+SELECT
+	to_char(order_date, 'Month') AS month_2021,
+	round(SUM(after_discount)) AS total_transaction
+FROM 
+	order_detail
+WHERE
+	is_valid = 1
+	AND to_char(order_date, 'yyyy-mm-dd') BETWEEN '2021-01-01' AND '2021-12-31'
+GROUP BY
+	1
+ORDER BY 
+	2 DESC
+
+
+-- No 2
+-- Pada bulan apa total pelanggan, total order dan total jumlah kuantitas produk terbanyak
+
+SELECT
+	to_char(order_date, 'Month') AS month_2021,
+	COUNT(DISTINCT customer_id) AS total_customer,
+	COUNT(DISTINCT id) AS total_order,
+	SUM(qty_ordered) AS total_quantity
+FROM 
+	order_detail
+WHERE
+	is_valid = 1
+	AND to_char(order_date, 'yyyy-mm-dd') BETWEEN '2021-01-01' AND '2021-12-31'
+GROUP BY
+	1
+ORDER BY 
+	3 DESC
+	
+-- No 3
+-- Filter transaksi pada tahun 2022
+-- kategori yang menghasilkan nilai transaksi terbesar
+
+SELECT
+	sd.category,
+	ROUND(SUM(od.after_discount)) AS total_transaction
+FROM 
+	order_detail AS od       -- od = penamaan/alias table 'order_detail'
+LEFT JOIN sku_detail AS sd   -- sd = penamaan/alias table 'sku_detail'
+	ON od.sku_id = sd.id
+WHERE
+	is_valid = 1
+	AND order_date BETWEEN '2022-01-1' AND '2022-12-31'
+GROUP BY
+	1
+ORDER BY
+	2 DESC
+	
+	
+-- No 4
+-- filter tahun 2021 dan 2022
+-- Sebutkan kategori yang mengalami peningkatan dan penurunan
+
+WITH
+transaction as (
+	SELECT 
+		sd.category,
+		SUM(CASE WHEN to_char(order_date, 'yyyy-mm-dd') BETWEEN '2021-01-01' AND '2021-12-31'
+		THEN od.after_discount END) AS total_sales_2021,
+		SUM(CASE WHEN to_char(order_date, 'yyyy-mm-dd') BETWEEN '2022-01-01' AND '2022-12-31'
+		THEN od.after_discount END) AS total_sales_2022
+	FROM 
+		order_detail AS od
+	LEFT JOIN
+		sku_detail AS sd
+		ON od.sku_id = sd.id
+	WHERE
+		is_valid = 1
+	GROUP BY
+		1
+)
+
+SELECT
+	transaction.*,
+	total_sales_2022 - total_sales_2021 AS Growth,
+	CASE
+		WHEN total_sales_2022 < total_sales_2021 THEN 'Menurun'
+		WHEN total_sales_2022 > total_sales_2021 THEN 'Meningkat'
+		ELSE 'Stagnan' 
+	END AS Keterangan
+FROM 
+	transaction
+ORDER BY
+	4 DESC
+
+
+-- No 5
+-- Filter tahun 2022
+-- sku_name dan category (dari table sku_detail)
+-- Total pelanggan, Total order, dan Total qty (dari table order_detail)
+
+SELECT
+	sd.sku_name,
+	sd.category,
+	ROUND(SUM(after_discount)) AS total_sales,
+	COUNT(DISTINCT od.customer_id) AS total_cust,
+	COUNT(od.id) AS total_order,
+	SUM(od.qty_ordered) AS total_qty
+FROM 
+	order_detail AS od
+LEFT JOIN
+	sku_detail AS sd
+	ON od.sku_id = sd.id
+WHERE
+	is_valid = 1
+	AND order_date BETWEEN '2022-01-01' AND '2022-12-31'
+GROUP BY
+	1,2
+ORDER BY
+	3 DESC
+LIMIT 10
+
+
+
+-- NO 6
+-- Filter tahun 2022
+-- 5 metode pembayaran paling banyak di gunakaan berdasarkan unique order
+-- dari tabel order_detail dan payment_detail
+-- is_valid = 1
+
+SELECT
+	pd.payment_method,
+	COUNT(DISTINCT od.customer_id) AS total_pelanggan
+FROM
+	order_detail AS od
+LEFT JOIN
+	payment_detail AS pd
+	ON od.payment_id = pd.id
+WHERE 
+	is_valid = 1
+	AND order_date BETWEEN '2022-01-01' AND '2022-12-31'
+GROUP BY
+	1
+ORDER BY
+	2 DESC
+LIMIT 5
+
+
+-- No 7
+-- Filter by merek : Samsung, Apple, Sony, Huawei, Lenovo
+-- di sorting berdasar nilai transaksi nya
+WITH a AS (
+SELECT 
+	CASE
+		WHEN LOWER (sd.sku_name) LIKE '%samsung%' THEN 'Samsung'
+		WHEN LOWER (sd.sku_name) LIKE '%iphone%' OR LOWER (sd.sku_name) LIKE '%ipad%'
+		OR LOWER (sd.sku_name) LIKE '%macbook%' OR LOWER (sd.sku_name) LIKE '%apple%'
+		THEN 'Apple'
+		WHEN LOWER (sd.sku_name) LIKE '%sony%' THEN 'Sony'
+		WHEN LOWER (sd.sku_name) LIKE '%huawei%' THEN 'Huawei'
+		WHEN LOWER (sd.sku_name) LIKE '%lenovo%' THEN 'Lenovo'
+		END AS product_name,
+	ROUND(SUM(od.after_discount)) AS total_sales
+FROM order_detail AS od
+LEFT JOIN sku_detail AS sd
+	ON od.sku_id = sd.id
+WHERE
+	is_valid = 1
+GROUP BY 
+	1
+ORDER BY 2 DESC
+)
+SELECT 
+	a.*
+FROM a
+WHERE product_name notnull
+
+
+-- No 8
+-- filter tahun 2021 dan 2022 tiap kategori
+-- buatlah selisih % perbedaan profit tahun 2021 dengan 2022
+-- profit = after_discount - (cogs*qty_ordered)
+-- is_valid = 1
+
+
+WITH b AS (
+WITH a AS (
+SELECT
+	od.id,
+	to_char(od.order_date, 'yyyy') AS year_order,
+	sd.category,
+	od.after_discount - (sd.cogs*od.qty_ordered) AS profit
+FROM order_detail AS od
+	LEFT JOIN sku_detail AS sd ON sd.id = od.sku_id
+	WHERE 
+		is_valid = 1)
+SELECT
+	a.category,
+	SUM(case when year_order = '2021' then a .profit end) AS profit_2021,
+	SUM(case when year_order = '2022' then a .profit end) AS profit_2022
+FROM a
+GROUP BY 1)
+SELECT
+b.*,
+(b.profit_2022 - b.profit_2021) / b.profit_2021 AS growth
+FROM b
+ORDER BY 4 DESC	
+
+
+-- No 9
+-- Filter tahun 2022
+-- is_valid = 1
+-- top 5 SKU profit tertinggi
+
+
+WITH a AS (
+SELECT
+	od.id,
+	sd.sku_name,
+	od.after_discount - (sd.cogs*od.qty_ordered) AS profit
+FROM order_detail AS od
+LEFT JOIN sku_detail AS sd ON sd.id = od.sku_id
+WHERE
+	is_valid = 1
+	AND to_char(order_date, 'yyyy-mm-dd') BETWEEN '2022-01-01' AND '2022-12-31'
+	AND sd.category = 'Women Fashion')  -- Kategori Women Fashion merupakan kategori profit 
+										-- terbesar pada tahun 2021-2022
+SELECT 
+a.sku_name,
+SUM(a.profit) AS total_profit
+FROM a
+GROUP BY 1
+ORDER BY 2 DESC
+LIMIT 5
+
+
+-- No 10
+
+SELECT
+	sd.category,
+	COUNT(DISTINCT CASE WHEN pd.payment_method = 'cod' THEN od.id END) AS cod,
+	COUNT(DISTINCT CASE WHEN pd.payment_method = 'Easypay' THEN od.id END) AS easypay,
+	COUNT(DISTINCT CASE WHEN pd.payment_method = 'Payaxis' THEN od.id END) AS payaxis,
+	COUNT(DISTINCT CASE WHEN pd.payment_method = 'customercredit' THEN od.id END) AS customercredit,
+	COUNT(DISTINCT CASE WHEN pd.payment_method = 'jazzwallet' THEN od.id END) AS jazzwallet
+FROM order_detail AS od
+LEFT JOIN payment_detail pd ON pd.id = od.payment_id
+LEFT JOIN sku_detail sd ON sd.id = od.sku_id
+WHERE 
+	is_valid = 1
+	AND to_char(order_date, 'yyyy-mm-dd') BETWEEN '2022-01-01' AND '2022-12-31'
+GROUP BY 1
+ORDER BY 2 DESC
+
+
+Select * from order_detail limit 10
+select * from sku_detail
+WHERE sku_name LIKE '%samsung%'
+select * from payment_detail
